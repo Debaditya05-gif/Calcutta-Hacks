@@ -1,0 +1,257 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  fullName      String
+  avatarUrl     String?
+  bio           String?   @db.Text
+  age           Int?
+  gender        String?
+  interests     Json      @default("[]") // Array of strings
+  travelStyle   String?   // "adventurous" | "cultural" | "luxury"
+  isSoloTraveler Boolean  @default(true)
+  totalPoints   Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  reviews        RestaurantReview[]
+  trips          TripPlan[]
+  userBadges     UserBadge[]
+  userQuests     UserQuest[]
+  siteVisits     SiteVisit[]
+  
+  // Matching relations
+  matchesAsUser1 TravelMatch[] @relation("User1Matches")
+  matchesAsUser2 TravelMatch[] @relation("User2Matches")
+
+  @@map("users")
+}
+
+// ============================================
+// HERITAGE SITES
+// ============================================
+
+model HeritageSite {
+  id                    String   @id @default(cuid())
+  name                  String
+  shortDescription      String?  @db.VarChar(255)
+  description           String   @db.Text
+  category              String
+  latitude              Float
+  longitude             Float
+  address               String
+  entryFee              Int?
+  openingHours          String?
+  bestTimeToVisit       String?
+  historicalSignificance String? @db.Text
+  imageUrl              String?
+  rating                Float    @default(0)
+  visitCount            Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  quests        HeritageQuest[]
+  tripActivities TripActivity[]
+  visits        SiteVisit[]
+
+  @@map("heritage_sites")
+}
+
+model SiteVisit {
+  id        String   @id @default(cuid())
+  userId    String
+  siteId    String
+  visitedAt DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site HeritageSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId, visitedAt])
+  @@map("site_visits")
+}
+
+// ============================================
+// RESTAURANTS
+// ============================================
+
+model Restaurant {
+  id              String   @id @default(cuid())
+  name            String
+  description     String   @db.Text
+  cuisineType     Json     @default("[]") // Array of strings
+  latitude        Float
+  longitude       Float
+  address         String
+  priceRange      String   // "budget" | "moderate" | "luxury"
+  rating          Float    @default(0)
+  reviewCount     Int      @default(0)
+  imageUrl        String?
+  avgCostPerPerson Int?
+  specialties     Json     @default("[]") // Array of strings
+  isAssured       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  reviews        RestaurantReview[]
+  tripActivities TripActivity[]
+
+  @@map("restaurants")
+}
+
+model RestaurantReview {
+  id           String   @id @default(cuid())
+  restaurantId String
+  userId       String
+  rating       Int
+  text         String   @db.Text
+  dishesTried  Json     @default("[]") // Array of strings
+  createdAt    DateTime @default(now())
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_reviews")
+}
+
+// ============================================
+// TRAVEL MATCHING
+// ============================================
+
+model TravelMatch {
+  id                 String   @id @default(cuid())
+  userId1            String
+  userId2            String
+  compatibilityScore Int      @default(0)
+  status             String   @default("pending") // "pending" | "liked" | "passed" | "matched"
+  commonInterests    Json     @default("[]") // Array of strings
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user1 User @relation("User1Matches", fields: [userId1], references: [id], onDelete: Cascade)
+  user2 User @relation("User2Matches", fields: [userId2], references: [id], onDelete: Cascade)
+
+  @@unique([userId1, userId2])
+  @@map("travel_matches")
+}
+
+// ============================================
+// TRIP PLANNER
+// ============================================
+
+model TripPlan {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  budget      Int?
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities TripActivity[]
+
+  @@map("trip_plans")
+}
+
+model TripActivity {
+  id            String   @id @default(cuid())
+  tripId        String
+  date          DateTime
+  siteId        String?
+  restaurantId  String?
+  estimatedCost Int?
+  notes         String?  @db.Text
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  trip       TripPlan      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  site       HeritageSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  restaurant Restaurant?   @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+
+  @@map("trip_activities")
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+model Badge {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  description      String
+  iconUrl          String?
+  requirementType  String   // "visits" | "restaurants" | "matches" | "quests"
+  requirementValue Int
+  createdAt        DateTime @default(now())
+
+  userBadges UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  progress   Int      @default(0)
+  unlockedAt DateTime?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model HeritageQuest {
+  id             String   @id @default(cuid())
+  name           String
+  description    String   @db.Text
+  heritageSiteId String
+  rewardPoints   Int
+  rewardDiscount Int
+  difficultyLevel String  // "easy" | "medium" | "hard"
+  clue           String   @db.Text
+  createdAt      DateTime @default(now())
+
+  heritageSite HeritageSite @relation(fields: [heritageSiteId], references: [id], onDelete: Cascade)
+  userQuests   UserQuest[]
+
+  @@map("heritage_quests")
+}
+
+model UserQuest {
+  id          String    @id @default(cuid())
+  userId      String
+  questId     String
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest HeritageQuest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questId])
+  @@map("user_quests")
+}
